@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*.local
+.vercel
+*.log
+test-results/
+test/e2e/screenshots/
+.DS_Store
