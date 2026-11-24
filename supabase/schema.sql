@@ -149,21 +149,24 @@ create policy guides_read on public.guides for select to authenticated
 
 -- Two-factor: once someone has turned on an authenticator app, their data can
 -- only be reached from a session that has passed the second step.
+-- Runs with the owner's rights so it can check auth.mfa_factors without
+-- giving signed-in users direct access to that table.
+create or replace function public.mfa_satisfied() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce(auth.jwt() ->> 'aal', '') = 'aal2'
+    or not exists (select 1 from auth.mfa_factors f
+      where f.user_id = auth.uid() and f.status = 'verified')
+$$;
+revoke all on function public.mfa_satisfied() from public, anon;
+grant execute on function public.mfa_satisfied() to authenticated;
+
 drop policy if exists mfa_vaults on public.vaults;
 create policy mfa_vaults on public.vaults as restrictive to authenticated
-  using (
-    (select auth.jwt() ->> 'aal') = 'aal2'
-    or not exists (select 1 from auth.mfa_factors f
-      where f.user_id = (select auth.uid()) and f.status = 'verified')
-  );
+  using ((select public.mfa_satisfied()));
 
 drop policy if exists mfa_entries on public.entries;
 create policy mfa_entries on public.entries as restrictive to authenticated
-  using (
-    (select auth.jwt() ->> 'aal') = 'aal2'
-    or not exists (select 1 from auth.mfa_factors f
-      where f.user_id = (select auth.uid()) and f.status = 'verified')
-  );
+  using ((select public.mfa_satisfied()));
 
 -- ---------------------------------------------------------------------------
 -- Starting guide library. Hidden from executors until approved on /review.

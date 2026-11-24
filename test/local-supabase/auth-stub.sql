@@ -30,7 +30,7 @@ create table if not exists auth.mfa_factors (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
-grant select on auth.mfa_factors to authenticated;
+-- Deliberately no grant on auth.mfa_factors: the schema must not need one.
 
 create or replace function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
