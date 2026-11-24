@@ -23,7 +23,7 @@ export default function Setup() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (!data?.user) router.replace('/');
+      if (!data?.user) router.replace('/signin');
       else setUser(data.user);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

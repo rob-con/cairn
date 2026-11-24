@@ -17,9 +17,9 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace('/');
+      if (!user) return router.replace('/signin');
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') return router.replace('/');
+      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') return router.replace('/signin');
 
       // Link this account to any vault that invited this email address.
       await fetch('/api/claim', { method: 'POST' }).catch(() => {});

@@ -1,171 +1,125 @@
-'use client';
-import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '../lib/supabase';
-import { Wordmark } from '../components/Mark';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { currentUser } from '../lib/server';
+import Mark, { Wordmark } from '../components/Mark';
 
-const COPY = {
-  signin: { title: 'Welcome back', button: 'Sign in' },
-  signup: { title: 'Create your account', button: 'Create account' },
-  forgot: { title: 'Reset your password', button: 'Send reset link' },
-  mfa: { title: 'One more step', button: 'Continue' },
-  sent: { title: 'Check your email' },
-};
+export const dynamic = 'force-dynamic';
 
-function SignInInner() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const [mode, setMode] = useState('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
-  const [message, setMessage] = useState(params.get('link') === 'expired' ? 'That link has expired or was already used. Please sign in, or ask for a new one.' : '');
-  const [sentText, setSentText] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  // Already signed in? Go straight on.
-  useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data?.user) return;
-      if (await needsSecondStep()) setMode('mfa');
-      else router.replace('/home');
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function needsSecondStep() {
-    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    return data && data.nextLevel === 'aal2' && data.currentLevel !== 'aal2';
-  }
-
-  function switchTo(next) {
-    setMode(next);
-    setMessage('');
-  }
-
-  async function submit(e) {
-    e.preventDefault();
-    setMessage('');
-    setBusy(true);
-    try {
-      if (mode === 'signin') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          setMessage(error.message === 'Email not confirmed'
-            ? 'Please confirm your email address first. The link is in your inbox.'
-            : 'That email and password did not match. Please check and try again.');
-          return;
-        }
-        if (await needsSecondStep()) { setMode('mfa'); return; }
-        router.replace('/home');
-      } else if (mode === 'signup') {
-        if (password.length < 10) { setMessage('Please choose a password of at least 10 characters.'); return; }
-        const { data, error } = await supabase.auth.signUp({
-          email, password,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-        });
-        if (error) { setMessage(error.message); return; }
-        if (data.session) { router.replace('/home'); return; }
-        setSentText(`We have sent a confirmation link to ${email}. Open it on this device to finish creating your account.`);
-        setMode('sent');
-      } else if (mode === 'forgot') {
-        await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/callback?next=/reset` });
-        setSentText(`If there is an account for ${email}, a link to choose a new password is on its way. Your vault passphrase is not affected.`);
-        setMode('sent');
-      } else if (mode === 'mfa') {
-        const { data: factors } = await supabase.auth.mfa.listFactors();
-        const factor = factors?.totp?.[0];
-        if (!factor) { router.replace('/home'); return; }
-        const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code: code.replace(/\s/g, '') });
-        if (error) { setMessage('That code did not work. Codes change every 30 seconds, so please try the newest one.'); return; }
-        router.replace('/home');
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+// The front page: what Cairn is, before anyone is asked to sign in.
+// People who are already signed in go straight on to their vault.
+export default async function Landing() {
+  if (await currentUser()) redirect('/home');
 
   return (
-    <main className="welcome">
-      <div className="welcome-side">
-        <div>
-          <Wordmark size={40} />
-          <div style={{ marginTop: '18vh' }}>
-            <h2>A calm place to leave things in order.</h2>
-            <p>Record the everyday accounts your household relies on, so the person you trust can look after each one when the time comes.</p>
-            <ul>
-              <li>Everything you add is locked on your own device before it is saved. We cannot read it.</li>
-              <li>Your executor opens it later with a recovery key that only you hand over.</li>
-              <li>Clear, current steps for each service: keep it, transfer it, or close it.</li>
+    <div className="landing">
+      <header className="landing-bar">
+        <Wordmark size={32} />
+        <nav aria-label="Account">
+          <Link href="/signin" className="button ghost">Sign in</Link>
+          <Link href="/signin?mode=signup" className="button primary small">Get started</Link>
+        </nav>
+      </header>
+
+      <section className="hero">
+        <div className="hero-text">
+          <h1>A calm place to leave things in order.</h1>
+          <p>
+            Cairn keeps a record of the everyday accounts your household relies on, such as streaming services,
+            the home Wi-Fi and the garage door code, with a note and a wish for each. When the time comes, the
+            person you trust is guided through them, one at a time.
+          </p>
+          <div className="actions">
+            <Link href="/signin?mode=signup" className="button primary">Get started</Link>
+            <Link href="/signin" className="button secondary on-dark">Sign in</Link>
+          </div>
+        </div>
+
+        <figure className="hero-card" aria-label="An example of what an executor sees">
+          <p className="hero-card-meta">Service 3 of 12</p>
+          <p className="hero-card-title">Netflix</p>
+          <p className="hero-card-wish">Robert&apos;s wish: <strong>Close it</strong></p>
+          <div className="notebox">
+            <span className="label">A note left for you</span>
+            <p>This is on the family plan. Cancel it last, after the kids have moved their profiles.</p>
+          </div>
+          <ol className="steps">
+            <li>Open Netflix&apos;s request form for a deceased member&apos;s account.</li>
+            <li>Attach the death certificate and submit it.</li>
+          </ol>
+          <figcaption>An example of what your executor sees</figcaption>
+        </figure>
+      </section>
+
+      <main>
+        <section className="band" aria-labelledby="how">
+          <h2 id="how">How it works</h2>
+          <ol className="how">
+            <li>
+              <span className="how-num">1</span>
+              <h3>Write things down</h3>
+              <p>Add the services you use, the login for each, a note in your own words, and whether it should be kept, transferred or closed.</p>
+            </li>
+            <li>
+              <span className="how-num">2</span>
+              <h3>Choose your executor</h3>
+              <p>Invite the person you trust. Give them your recovery key, on paper or in person. We never send it by email.</p>
+            </li>
+            <li>
+              <span className="how-num">3</span>
+              <h3>They are guided through it</h3>
+              <p>When the time comes, they open the vault and work through one service at a time, with clear, current steps.</p>
+            </li>
+          </ol>
+        </section>
+
+        <section className="band two-col" aria-labelledby="privacy">
+          <div>
+            <h2 id="privacy">We cannot read your vault</h2>
+            <p className="lead">Everything you add is locked on your own device before it is saved. What reaches us is scrambled text that only your passphrase or your recovery key can open.</p>
+            <p className="quiet">That also means we cannot reset it. If both the passphrase and the recovery key are lost, nobody can open the vault, including us.</p>
+          </div>
+          <div className="card">
+            <h3>What we can see</h3>
+            <ul className="ticks">
+              <li>Your email address and first name</li>
+              <li>When things were saved</li>
+            </ul>
+            <h3>What we cannot see</h3>
+            <ul className="ticks no">
+              <li>Which services you use</li>
+              <li>Usernames, passwords and codes</li>
+              <li>Your notes and steps</li>
             </ul>
           </div>
-        </div>
-        <p className="small-text" style={{ marginTop: 32 }}>Cairn is for streaming, home and everyday logins. Please keep bank and crypto details somewhere else.</p>
-      </div>
+        </section>
 
-      <div className="welcome-main">
-        <div>
-          <h1>{COPY[mode].title}</h1>
-
-          {mode === 'sent' && (
-            <>
-              <p className="lead">{sentText}</p>
-              <button className="link" onClick={() => switchTo('signin')}>Back to sign in</button>
-            </>
-          )}
-
-          {mode !== 'sent' && (
-            <form onSubmit={submit}>
-              {mode === 'mfa' ? (
-                <label>
-                  Code from your authenticator app
-                  <input className="code-input" inputMode="numeric" autoComplete="one-time-code" value={code}
-                    onChange={(e) => setCode(e.target.value)} required autoFocus maxLength={8} />
-                </label>
-              ) : (
-                <label>
-                  Email
-                  <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
-                </label>
-              )}
-              {(mode === 'signin' || mode === 'signup') && (
-                <label>
-                  Password
-                  {mode === 'signup' && <span className="hint">At least 10 characters. This signs you in; your vault gets its own passphrase next.</span>}
-                  <input type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                    value={password} onChange={(e) => setPassword(e.target.value)} required minLength={mode === 'signup' ? 10 : 1} />
-                </label>
-              )}
-              <button className="primary full" type="submit" disabled={busy}>{busy ? 'One moment…' : COPY[mode].button}</button>
-            </form>
-          )}
-
-          {message && <p className="note warn" role="alert">{message}</p>}
-
-          <div style={{ marginTop: 24, display: 'grid', gap: 4, justifyItems: 'start' }}>
-            {mode === 'signin' && (
-              <>
-                <button className="link" onClick={() => switchTo('signup')}>New here? Create an account</button>
-                <button className="link" onClick={() => switchTo('forgot')}>Forgotten your password?</button>
-              </>
-            )}
-            {(mode === 'signup' || mode === 'forgot') && (
-              <button className="link" onClick={() => switchTo('signin')}>Already have an account? Sign in</button>
-            )}
-            {mode === 'mfa' && (
-              <button className="link" onClick={async () => { await supabase.auth.signOut(); switchTo('signin'); }}>Use a different account</button>
-            )}
+        <section className="band two-col" aria-labelledby="fit">
+          <div>
+            <h2 id="fit">What belongs here</h2>
+            <p>Streaming and music, email and photo accounts, the home router, alarm and garage door codes, phone and utility accounts: the everyday things that are hard to sort out without the right details.</p>
           </div>
-        </div>
-      </div>
-    </main>
-  );
-}
+          <div className="note warn">
+            <p style={{ margin: 0 }}><strong>Not for money.</strong> Please keep bank logins, investments and crypto wallets with your will or a financial adviser instead. Cairn is deliberately not built for them.</p>
+          </div>
+        </section>
 
-export default function SignIn() {
-  return (
-    <Suspense fallback={null}>
-      <SignInInner />
-    </Suspense>
+        <section className="band executor-band" aria-labelledby="exec">
+          <Mark size={44} />
+          <div>
+            <h2 id="exec">Were you asked to be someone&apos;s executor?</h2>
+            <p>Create a free account with the email address your invitation was sent to. There is nothing else to do for now. Keep the recovery key you were given somewhere safe.</p>
+            <Link href="/signin?mode=signup" className="button secondary">Create my account</Link>
+          </div>
+        </section>
+      </main>
+
+      <footer className="landing-foot">
+        <Wordmark size={24} />
+        <p>
+          Cairn protects your details if our servers are ever broken into. It cannot protect against a lost or stolen
+          recovery key, or an unlocked device left with someone else, so please keep both safe.
+        </p>
+      </footer>
+    </div>
   );
 }

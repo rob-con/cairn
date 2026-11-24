@@ -83,7 +83,7 @@ const emails = async () => (await fetch(`${SUPA}/__emails`)).json();
 const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage: true });
 
 async function signUp(page, email, password) {
-  await page.goto(BASE);
+  await page.goto(`${BASE}/signin`);
   await page.getByRole('heading', { name: 'Welcome back' }).waitFor();
   if (email === 'robert@example.com') await shot(page, '00-welcome');
   await page.getByRole('button', { name: 'New here? Create an account', exact: true }).click();
@@ -92,7 +92,7 @@ async function signUp(page, email, password) {
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
 }
 async function signIn(page, email, password) {
-  await page.goto(BASE);
+  await page.goto(`${BASE}/signin`);
   await page.getByLabel('Email').fill(email);
   await page.getByLabel(/^Password/).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -119,6 +119,25 @@ const planner = await desktop.newPage();
 planner.on('pageerror', (e) => console.log('    [planner page error]', e.message));
 
 try {
+  console.log('\nFront page');
+  await step('visitors see a one-page summary before signing in', async () => {
+    await planner.goto(BASE);
+    await planner.getByRole('heading', { name: 'A calm place to leave things in order.' }).waitFor();
+    await planner.getByRole('heading', { name: 'How it works' }).waitFor();
+    await planner.getByRole('heading', { name: 'We cannot read your vault' }).waitFor();
+    await shot(planner, '00a-landing');
+    const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await phone.goto(BASE);
+    assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false, 'no sideways scrolling');
+    await shot(phone, '00b-landing-phone');
+    await phone.close();
+    await planner.getByRole('link', { name: 'Get started', exact: true }).first().click();
+    await planner.getByRole('heading', { name: 'Create your account' }).waitFor();
+    await planner.goto(BASE);
+    await planner.getByRole('link', { name: 'Sign in', exact: true }).first().click();
+    await planner.getByRole('heading', { name: 'Welcome back' }).waitFor();
+  });
+
   console.log('\nPlanner');
   await step('signs up and is sent to vault setup', async () => {
     await signUp(planner, PLANNER.email, PLANNER.password);
@@ -211,6 +230,8 @@ try {
     await planner.getByRole('button', { name: 'Open', exact: true }).click();
     await planner.getByText('2 services', { exact: true }).waitFor();
     await shot(planner, '06-vault-overview');
+    await planner.goto(BASE);
+    await planner.waitForURL('**/vault');
   });
 
   await step('invites an executor (email sent, recovery key never emailed)', async () => {
